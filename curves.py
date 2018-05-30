@@ -1,4 +1,4 @@
-__all__ = ["Curve", "MixedCurve", "Budget"]
+__all__ = ["Sigmoid", "MixedCurve", "Knapsack"]
 
 from functools import partial
 
@@ -75,7 +75,7 @@ def art_derivative(x, a, b, multiplier=1.0):
     return numerator / denominator
 
 
-class Curve(object):
+class Sigmoid(object):
     # TODO LaTeX curve equation rendering
     def __init__(self, cap, ec50, steep, multiplier=1, price=1, curve_type='basic'):
         """
@@ -167,12 +167,6 @@ class ArtyomCurve(object):
 
     def __call__(self, x):
         return self.fun(x)
-
-        # def __str__(self):
-        #     first_term = f'100 / (1 + exp({self.a} * exp(x * - {self.a} / {self.b})))'
-        #     second_term = f'100 / (1 + exp({self.a}))'
-
-        #     return first_term + ' - ' + second_term
 
 
 class MixedCurve(object):
@@ -276,7 +270,8 @@ class Budget(object):
     @property
     def derivative(self):
 
-        # despite most of the time sign == 1.0, this feature is needed if we want to minimize something
+        # actual derivative sign is 1.0, but since we're optimizing for minimum,
+        # in solver call we pass -1.0 as argument
         def f(x, sign=1.0):
             return [sign * curve.derivative(x[i]) for i, curve in enumerate(self.__curves)]
 
@@ -305,29 +300,6 @@ class Budget(object):
         )
         return constraints
 
-    @property
-    def constraints_cobyla(self):
-        """
-        Generate callable constraints for SLSQP optimization.
-        :return: dict{str, callable, callable}
-        """
-
-        def fun(x):
-            spend = sum(x)
-            return spend - self.budget
-
-        def jac(x):
-            return array([1.0 for _ in range(len(x))])
-
-        constraints = (
-            {
-                'type': 'ineq',
-                'fun': fun,
-                'jac': jac
-            },
-        )
-        return constraints
-
     def solve(self, disp=True, maxiter=100):
         """
         Solve optimization problem for budget.
@@ -346,33 +318,6 @@ class Budget(object):
             method='SLSQP',
             jac=derivative,
             bounds=self.__bounds,
-            constraints=constraints_cobyla,
-            options={
-                'disp': disp,
-                'maxiter': maxiter
-            }
-        )
-
-        return self.solution.x
-
-    def solve_cobyla(self, disp=False, maxiter=100):
-        """
-        Solve optimization problem for budget.
-        :param disp: Set to True to print convergence messages
-        :param maxiter: Maximum number of iterations to perform
-        :return: numpy.array with corresponding budgets
-        """
-        constraints = self.constraints_cobyla
-        derivative = self.derivative
-        x0 = array([bound[0] for bound in self.__bounds])
-
-        self.solution = minimize(
-            fun=self.fun,
-            x0=x0,
-            args=(-1.0,),
-            method='COBYLA',
-            jac=derivative,
-            bounds=self.__bounds,
             constraints=constraints,
             options={
                 'disp': disp,
@@ -381,6 +326,7 @@ class Budget(object):
         )
 
         return self.solution.x
+
 
     def plot(self, names=None, budget=None, ext='png'):
         """
@@ -417,6 +363,3 @@ class Budget(object):
             fig = lines.get_figure()
             fig.savefig("plot.".format(ext))
 
-
-if __name__ == '__main__':
-    pass
